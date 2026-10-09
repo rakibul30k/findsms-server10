@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Find SMS Chat</title>
+    <style>
+        body { background: #0b0f19; color: #fff; font-family: sans-serif; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .container { width: 100vw; height: 100vh; max-width: 480px; background: #111827; display: flex; flex-direction: column; }
+        .screen { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; text-align: center; }
+        .card { width: 100%; background: #1f2937; padding: 25px; border-radius: 12px; border: 1px solid #374151; }
+        input, select { width: 100%; padding: 12px; background: #111827; border: 1px solid #374151; border-radius: 8px; color: #fff; margin-bottom: 12px; box-sizing: border-box; font-size: 15px; }
+        button { width: 100%; padding: 12px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 15px; }
+        .hidden { display: none !important; }
+        .header { display: flex; justify-content: space-between; align-items: center; background: #1f2937; padding: 12px; border-bottom: 1px solid #374151; }
+        .body { flex: 1; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+        .item { background: #1f2937; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border: 1px solid #374151; }
+        .msg { padding: 10px; border-radius: 8px; max-width: 75%; font-size: 14px; word-break: break-word; }
+        .my { background: #2563eb; align-self: flex-end; }
+        .other { background: #1f2937; align-self: flex-start; }
+        .msg img { max-width: 100%; border-radius: 6px; margin-top: 5px; }
+        .msg audio { width: 100%; max-width: 220px; margin-top: 5px; }
+        .footer { background: #1f2937; padding: 10px; display: flex; gap: 6px; align-items: center; border-top: 1px solid #374151; }
+        .footer input[type="text"] { margin-bottom: 0; flex: 1; }
+        .btn-icon { background: #111827; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 16px; border: 1px solid #374151; display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; box-sizing: border-box; }
+        .recording { background: #dc2626 !important; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Pass Screen -->
+        <div id="s-pass" class="screen">
+            <div class="card">
+                <h2>Find SMS</h2>
+                <p style="color:#9ca3af; font-size:13px;">পাসওয়ার্ড দিন (1234)</p>
+                <input type="password" id="pass" placeholder="••••" style="text-align:center;">
+                <button onclick="checkPass()">প্রবেশ করুন</button>
+            </div>
+        </div>
+
+        <!-- Name Screen -->
+        <div id="s-name" class="screen hidden">
+            <div class="card">
+                <h2>আপনার নাম</h2>
+                <input type="text" id="name" placeholder="নাম লিখুন">
+                <button onclick="saveName()">শুরু করুন</button>
+            </div>
+        </div>
+
+        <!-- Home Screen -->
+        <div id="s-home" class="hidden" style="display:flex; flex-direction:column; height:100%;">
+            <div class="header">
+                <b>Find SMS চ্যাট</b>
+                <button onclick="openSettings()" style="width:auto; padding:6px 12px; font-size:13px;">সেটিংস</button>
+            </div>
+            <div id="friend-list" class="body">
+                <p style="color:#9ca3af; text-align:center; margin-top:40px;">কোনো ফ্রেন্ড নেই। সেটিংস থেকে UID দিয়ে অ্যাড করুন।</p>
+            </div>
+        </div>
+
+        <!-- Chat Screen -->
+        <div id="s-chat" class="hidden" style="display:flex; flex-direction:column; height:100%;">
+            <div class="header">
+                <button onclick="backHome()" style="width:auto; padding:4px 8px;">⬅️</button>
+                <b id="chat-title">চ্যাট</b>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <button onclick="startCall()" style="width:auto; padding:4px 8px; background:#059669; font-size:12px;">📞 কল</button>
+                    <span id="chat-status" style="font-size:11px; color:#22c55e;">● অনলাইন</span>
+                </div>
+            </div>
+            <div style="background:#1f2937; padding:6px; display:flex; gap:6px;">
+                <select id="ai-voice" style="margin:0; font-size:12px; padding:6px;">
+                    <option value="normal">সাধারণ কন্ঠ (Normal)</option>
+                    <option value="girl">এআই মেয়ে কন্ঠ (AI Girl)</option>
+                    <option value="boy">এআই ছেলে কন্ঠ (AI Boy)</option>
+                </select>
+            </div>
+            <div id="chat-box" class="body"></div>
+            
+            <form onsubmit="sendMsg(event)" class="footer">
+                <label for="img-input" class="btn-icon" title="ছবি পাঠান">📷</label>
+                <input type="file" id="img-input" accept="image/*" style="display:none;" onchange="sendImg(this)">
+                
+                <div id="mic-btn" class="btn-icon" onclick="toggleRecord()" title="ভয়েস রেকর্ড">🎙️</div>
+                
+                <input type="text" id="msg-input" placeholder="মেসেজ লিখুন...">
+                <button type="submit" style="width:65px;">পাঠান</button>
+            </form>
+        </div>
+
+        <!-- Call Screen -->
+        <div id="s-call" class="hidden" style="display:flex; flex-direction:column; justify-content:center; align-items:center; height:100%; background:#111827; text-align:center; padding:20px;">
+            <h2 id="call-title" style="margin-bottom:10px;">কল হচ্ছে...</h2>
+            <p id="call-status-text" style="color:#9ca3af; font-size:14px; margin-bottom:30px;">সংযুক্ত হচ্ছে...</p>
+            <button onclick="endCall()" style="background:#dc2626; max-width:150px;">কল কাটুন</button>
+        </div>
+
+        <!-- Settings Screen -->
+        <div id="s-set" class="hidden" style="display:flex; flex-direction:column; height:100%;">
+            <div class="header">
+                <b>সেটিংস</b>
+                <button onclick="backHome()" style="width:auto; padding:4px 8px;">❌</button>
+            </div>
+            <div class="body">
+                <p style="font-size:13px; color:#9ca3af;">আপনার UID (বন্ধুকে দিন):</p>
+                <div style="display:flex; gap:6px;">
+                    <input type="text" id="my-uid" readonly style="margin:0; text-align:center; color:#38bdf8; font-weight:bold;">
+                    <button onclick="copyUID()" style="width:90px; background:#059669; font-size:12px;">কপি</button>
+                </div>
+                <p style="font-size:13px; color:#9ca3af; margin-top:20px;">বন্ধুর UID দিন:</p>
+                <input type="text" id="f-uid" placeholder="UID লিখুন">
+                <button onclick="addFriend()" style="background:#059669;">ফ্রেন্ড অ্যাড করুন</button>
+                <button onclick="backHome()" style="background:#374151; margin-top:20px;">ফিরে যান</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        firebase.initializeApp({
+            apiKey: "AIzaSyDkjFf1FrIZmkoIwCw4IQ6im65U9kguZ0I",
+            authDomain: "private-sms-8007b.firebaseapp.com",
+            databaseURL: "https://private-sms-8007b-default-rtdb.firebaseio.com",
+            projectId: "private-sms-8007b",
+            storageBucket: "private-sms-8007b.firebasestorage.app",
+            messagingSenderId: "671288455604",
+            appId: "1:671288455604:web:09248f474c87c7cf1142e1"
+        });
+        const db = firebase.database();
+
+        let myName = localStorage.getItem("chat_name") || "";
+        let myUID = localStorage.getItem("chat_uid") || ("UID-" + Math.floor(100000 + Math.random() * 900000));
+        localStorage.setItem("chat_uid", myUID);
+
+        let activeChat = null, mediaRecorder, audioChunks = [], isRecording = false;
+
+        window.onload = function() {
+            // অ্যাপ ওপেন বা রিলোড দিলেই পাসওয়ার্ড স্ট্যাটাস মুছে ফেলে পাসওয়ার্ড স্ক্রিন দেখাবে
+            document.getElementById("s-pass").classList.remove("hidden");
+            document.getElementById("s-home").classList.add("hidden");
+            document.getElementById("s-name").classList.add("hidden");
+        }
+
+        function checkPass() {
+            let passInput = document.getElementById("pass").value.trim();
+            if(passInput === "1234") {
+                document.getElementById("s-pass").classList.add("hidden");
+                if(myName) {
+                    document.getElementById("s-home").classList.remove("hidden");
+                    initUser();
+                } else {
+                    document.getElementById("s-name").classList.remove("hidden");
+                }
+            } else { 
+                alert("ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিন (1234)"); 
+            }
+        }
+
+        function saveName() {
+            myName = document.getElementById("name").value.trim();
+            if(myName) {
+                localStorage.setItem("chat_name", myName);
+                document.getElementById("s-name").classList.add("hidden");
+                document.getElementById("s-home").classList.remove("hidden");
+                initUser();
+            } else { alert("নাম লিখুন।"); }
+        }
+
+        function initUser() {
+            db.ref('users/' + myUID).update({ name: myName, status: "অনলাইন" });
+            db.ref('users/' + myUID).onDisconnect().update({ status: "অফলাইন" });
+            loadFriends();
+        }
+
+        function openSettings() {
+            document.getElementById("s-home").classList.add("hidden");
+            document.getElementById("s-set").classList.remove("hidden");
+            document.getElementById("my-uid").value = myUID;
+        }
+
+        function backHome() {
+            document.getElementById("s-set").classList.add("hidden");
+            document.getElementById("s-chat").classList.add("hidden");
+            document.getElementById("s-call").classList.add("hidden");
+            document.getElementById("s-home").classList.remove("hidden");
+            loadFriends();
+        }
+
+        function copyUID() {
+            navigator.clipboard.writeText(myUID);
+            alert("UID কপি হয়েছে!");
+        }
+
+        function addFriend() {
+            let fUID = document.getElementById("f-uid").value.trim();
+            if(!fUID || fUID === myUID) { alert("সঠিক UID দিন।"); return; }
+            
+            db.ref('users/' + fUID).once('value', snap => {
+                if(snap.exists()) {
+                    let fData = snap.val();
+                    db.ref(`users/${myUID}/friends/${fUID}`).set({ name: fData.name, uid: fUID });
+                    db.ref(`users/${fUID}/friends/${myUID}`).set({ name: myName, uid: myUID });
+
+                    alert(fData.name + " সফলভাবে ফ্রেন্ড হিসেবে যুক্ত হয়েছে!");
+                    document.getElementById("f-uid").value = "";
+                    backHome();
+                } else { alert("❌ এই UID এর কোনো ইউজার পাওয়া যায়নি!"); }
+            });
+        }
+
+        function loadFriends() {
+            let list = document.getElementById("friend-list");
+            db.ref(`users/${myUID}/friends`).on('value', snapshot => {
+                list.innerHTML = "";
+                if(!snapshot.exists()) {
+                    list.innerHTML = `<p style="color:#9ca3af; text-align:center; margin-top:40px;">কোনো ফ্রেন্ড নেই। সেটিংস থেকে UID দিয়ে অ্যাড করুন।</p>`;
+                    return;
+                }
+                snapshot.forEach(child => {
+                    let f = child.val();
+                    db.ref('users/' + f.uid + '/status').on('value', s => {
+                        let st = s.val() || "অফলাইন";
+                        let el = document.getElementById("st-" + f.uid);
+                        if(el) { el.innerText = "● " + st; el.style.color = st === "অনলাইন" ? "#22c55e" : "#9ca3af"; }
+                    });
+                    list.innerHTML += `<div class="item" onclick="openChat('${f.uid}', '${f.name}')">
+                        <div><b>${f.name}</b><p id="st-${f.uid}" style="margin:2px 0 0; font-size:11px; color:#22c55e;">● অনলাইন</p></div>
+                        <span style="background:#2563eb; padding:4px 8px; border-radius:4px; font-size:12px;">চ্যাট</span>
+                    </div>`;
+                });
+            });
+        }
+
+        function openChat(uid, name) {
+            activeChat = { uid, name };
+            document.getElementById("s-home").classList.add("hidden");
+            document.getElementById("s-chat").classList.remove("hidden");
+            document.getElementById("chat-title").innerText = name;
+            loadMsgs();
+            listenCalls();
+        }
+
+        function sendMsg(e) {
+            e.preventDefault();
+            let input = document.getElementById("msg-input");
+            let text = input.value.trim();
+            let voiceType = document.getElementById("ai-voice").value;
+            if(!text || !activeChat) return;
+
+            if(voiceType === "girl") text += " 👧 [AI Girl]";
+            if(voiceType === "boy") text += " 👦 [AI Boy]";
+            
+            let roomId = myUID < activeChat.uid ? myUID + "_" + activeChat.uid : activeChat.uid + "_" + myUID;
+            db.ref('chats/' + roomId).push({ sender: myUID, text: text, type: "text", time: Date.now() });
+            input.value = "";
+        }
+
+        function sendImg(input) {
+            if(input.files && input.files[0] && activeChat) {
+                let reader = new FileReader();
+                reader.onload = function(e) {
+                    let roomId = myUID < activeChat.uid ? myUID + "_" + activeChat.uid : activeChat.uid + "_" + myUID;
+                    db.ref('chats/' + roomId).push({ sender: myUID, image: e.target.result, type: "image", time: Date.now() });
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function toggleRecord() {
+            let micBtn = document.getElementById("mic-btn");
+            let voiceType = document.getElementById("ai-voice").value;
+
+            if(!isRecording) {
+                navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    mediaRecorder.onstop = () => {
+                        let audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        let reader = new FileReader();
+                        reader.onload = function(e) {
+                            let audioBase64 = e.target.result;
+                            let labelTag = voiceType === "girl" ? " 👧 [AI Girl Voice]" : (voiceType === "boy" ? " 👦 [AI Boy Voice]" : " 🎙️ [Normal Voice]");
+                            let roomId = myUID < activeChat.uid ? myUID + "_" + activeChat.uid : activeChat.uid + "_" + myUID;
+                            db.ref('chats/' + roomId).push({ sender: myUID, audio: audioBase64, label: labelTag, type: "audio", time: Date.now() });
+                        }
+                        reader.readAsDataURL(audioBlob);
+                    };
+                    mediaRecorder.start();
+                    isRecording = true;
+                    micBtn.classList.add("recording");
+                    micBtn.innerText = "⏹️";
+                }).catch(err => alert("মাইক্রোফোন পারমিশন পাওয়া যায়নি!"));
+            } else {
+                mediaRecorder.stop();
+                isRecording = false;
+                micBtn.classList.remove("recording");
+                micBtn.innerText = "🎙️";
+            }
+        }
+
+        function startCall() {
+            if(!activeChat) return;
+            document.getElementById("s-chat").classList.add("hidden");
+            document.getElementById("s-call").classList.remove("hidden");
+            document.getElementById("call-title").innerText = activeChat.name + "-কে কল করা হচ্ছে...";
+            document.getElementById("call-status-text").innerText = "রিং হচ্ছে...";
+
+            db.ref('calls/' + activeChat.uid).set({ caller: myUID, callerName: myName, status: "ringing" });
+        }
+
+        function endCall() {
+            if(activeChat) {
+                db.ref('calls/' + activeChat.uid).remove();
+                db.ref('calls/' + myUID).remove();
+            }
+            document.getElementById("s-call").classList.add("hidden");
+            document.getElementById("s-chat").classList.remove("hidden");
+        }
+
+        function listenCalls() {
+            db.ref('calls/' + myUID).on('value', snap => {
+                if(snap.exists()) {
+                    let callData = snap.val();
+                    if(callData.status === "ringing") {
+                        if(confirm(callData.callerName + " থেকে কল এসেছে। রিসিভ করবেন?")) {
+                            document.getElementById("s-home").classList.add("hidden");
+                            document.getElementById("s-chat").classList.add("hidden");
+                            document.getElementById("s-call").classList.remove("hidden");
+                            document.getElementById("call-title").innerText = callData.callerName + " এর সাথে কথা হচ্ছে...";
+                            document.getElementById("call-status-text").innerText = "কানেক্টেড ✅";
+                            db.ref('calls/' + myUID + '/status').set("connected");
+                        } else {
+                            db.ref('calls/' + myUID).remove();
+                        }
+                    }
+                }
+            });
+        }
+
+        function loadMsgs() {
+            let box = document.getElementById("chat-box");
+            box.innerHTML = "";
+            let roomId = myUID < activeChat.uid ? myUID + "_" + activeChat.uid : activeChat.uid + "_" + myUID;
+            
+            db.ref('chats/' + roomId).off();
+            db.ref('chats/' + roomId).limitToLast(30).on('child_added', snap => {
+                let d = snap.val();
+                let isMe = d.sender === myUID;
+                let content = "";
+
+                if(d.type === "image") {
+                    content = `<img src="${d.image}">`;
+                } else if(d.type === "audio") {
+                    content = `<audio controls src="${d.audio}"></audio><div style="font-size:10px; color:#cbd5e1; margin-top:2px;">${d.label || ''}</div>`;
+                } else {
+                    content = d.text;
+                }
+
+                box.innerHTML += `<div class="msg ${isMe ? 'my' : 'other'}">${content}</div>`;
+                box.scrollTop = box.scrollHeight;
+            });
+        }
+    </script>
+</body>
+  </html>
