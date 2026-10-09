@@ -1,0 +1,16 @@
+{
+  "name": "Find SMS",
+  "short_name": "Find SMS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4a90e2",
+  "description": "Find SMS is a real-time web-based chat application designed for seamless messaging, live online status monitoring, and instant communication.",
+  "icons": [
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
